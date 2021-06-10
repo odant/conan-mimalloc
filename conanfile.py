@@ -36,6 +36,7 @@ class MimallocConan(ConanFile):
     }
     generators = "cmake"
     exports_patches = [
+        "patches/0001-CMakeLists.cmake.patch",
         "patches/0002-include-cstddef-to-get-std-size-t.patch"
     ]
     exports_sources = "src/*", "CMakeLists.txt", *exports_patches
@@ -133,6 +134,11 @@ class MimallocConan(ConanFile):
     def build(self):
         for p in self.exports_patches:
             tools.patch(patch_file=p)
+        if self.settings.compiler == "Visual Studio" and self.settings.arch == "x86":
+            tools.replace_path_in_file(os.path.join(self._source_subfolder, "CMakeLists.txt"),
+                                       "mimalloc-redirect.lib", "mimalloc-redirect32.lib")
+            tools.replace_path_in_file(os.path.join(self._source_subfolder, "CMakeLists.txt"),
+                                       "mimalloc-redirect.dll", "mimalloc-redirect32.dll")
         with tools.vcvars(self.settings) if self.settings.compiler == "Visual Studio" else tools.no_op():
             cmake = self._configure_cmake()
             cmake.build()
@@ -143,8 +149,6 @@ class MimallocConan(ConanFile):
             cmake = self._configure_cmake()
             cmake.install()
 
-        tools.rmdir(os.path.join(self.package_folder, "cmake"))
-
         if self.options.get_safe("single_object"):
             tools.remove_files_by_mask(os.path.join(self.package_folder, "lib"),
                                        "*.a")
@@ -152,14 +156,6 @@ class MimallocConan(ConanFile):
                         os.path.join(self.package_folder, "lib"))
             shutil.copy(os.path.join(self.package_folder, "lib", self._obj_name + ".o"),
                         os.path.join(self.package_folder, "lib", self._obj_name))
-
-        if self.settings.os == "Windows" and self.options.shared:
-            if self.settings.arch == "x86_64":
-                self.copy("mimalloc-redirect.dll", src=os.path.join(self._source_subfolder, "bin"),
-                          dst="bin")
-            elif self.settings.arch == "x86":
-                self.copy("mimalloc-redirect32.dll", src=os.path.join(self._source_subfolder, "bin"),
-                          dst="bin")
 
     @property
     def _obj_name(self):
