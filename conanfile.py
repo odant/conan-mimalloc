@@ -10,7 +10,7 @@ def get_safe(options, name):
         return None
 
 class MimallocConan(ConanFile):
-    version = "1.7.1+0"
+    version = "1.7.2+0"
     name = "mimalloc"
     license = "MIT"
     url = "https://github.com/conan-io/conan-center-index"
@@ -134,11 +134,6 @@ class MimallocConan(ConanFile):
     def build(self):
         for p in self.exports_patches:
             tools.patch(patch_file=p)
-        if self.settings.compiler == "Visual Studio" and self.settings.arch == "x86":
-            tools.replace_path_in_file(os.path.join(self._source_subfolder, "CMakeLists.txt"),
-                                       "mimalloc-redirect.lib", "mimalloc-redirect32.lib")
-            tools.replace_path_in_file(os.path.join(self._source_subfolder, "CMakeLists.txt"),
-                                       "mimalloc-redirect.dll", "mimalloc-redirect32.dll")
         with tools.vcvars(self.settings) if self.settings.compiler == "Visual Studio" else tools.no_op():
             cmake = self._configure_cmake()
             cmake.build()
