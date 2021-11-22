@@ -1,25 +1,25 @@
 diff --git a/src/CMakeLists.txt b/src/CMakeLists.txt
-index b56953c..2b29068 100644
+index 87f4cdd..083a3db 100644
 --- a/src/CMakeLists.txt
 +++ b/src/CMakeLists.txt
-@@ -208,10 +208,12 @@ endif()
+@@ -231,10 +231,12 @@ endif()
  # -----------------------------------------------------------------------------
  
  if (MI_INSTALL_TOPLEVEL)
-+  set(mi_install_bindir   "bin")
-   set(mi_install_libdir   "lib")
-   set(mi_install_incdir   "include")
-   set(mi_install_cmakedir "cmake")
++  set(mi_install_bindir   "${CMAKE_INSTALL_BINDIR}")
+   set(mi_install_libdir   "${CMAKE_INSTALL_LIBDIR}")
+   set(mi_install_incdir   "${CMAKE_INSTALL_INCLUDEDIR}")
+   set(mi_install_cmakedir "${CMAKE_INSTALL_LIBDIR}/cmake/mimalloc")
  else()
-+  set(mi_install_libdir   "bin/mimalloc-${mi_version}")
++  set(mi_install_bindir   "bin/mimalloc-${mi_version}")
    set(mi_install_libdir   "lib/mimalloc-${mi_version}")
    set(mi_install_incdir   "include/mimalloc-${mi_version}")
    set(mi_install_cmakedir "share/mimalloc-${mi_version}/cmake") 
-@@ -279,9 +281,14 @@ if(MI_BUILD_SHARED)
+@@ -303,9 +305,14 @@ if(MI_BUILD_SHARED)
      add_custom_command(TARGET mimalloc POST_BUILD
        COMMAND "${CMAKE_COMMAND}" -E copy "${CMAKE_CURRENT_SOURCE_DIR}/bin/mimalloc-redirect${MIMALLOC_REDIRECT_SUFFIX}.dll" $<TARGET_FILE_DIR:mimalloc>
        COMMENT "Copy mimalloc-redirect${MIMALLOC_REDIRECT_SUFFIX}.dll to output directory")
-+    install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/bin/mimalloc-redirect${MIMALLOC_REDIRECT_SUFFIX}.dll DESTINATION ${mi_install_bindir})
++    install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/bin/mimalloc-redirect${MIMALLOC_REDIRECT_SUFFIX}.dll DESTINATION ${mi_install_bindir})      
    endif()
  
 -  install(TARGETS mimalloc EXPORT mimalloc DESTINATION ${mi_install_libdir} LIBRARY)  

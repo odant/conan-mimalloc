@@ -36,8 +36,7 @@ class MimallocConan(ConanFile):
     }
     generators = "cmake"
     exports_patches = [
-        "patches/0001-CMakeLists.cmake.patch",
-        "patches/0002-include-cstddef-to-get-std-size-t.patch"
+        "patches/0001-CMakeLists.cmake.patch"
     ]
     exports_sources = "src/*", "CMakeLists.txt", *exports_patches
     no_copy_source = False
