@@ -580,8 +580,8 @@ static mi_segment_t* mi_segment_init(mi_segment_t* segment, size_t required, mi_
 
   // Initialize parameters
   const bool eager_delayed = (page_kind <= MI_PAGE_MEDIUM &&          // don't delay for large objects
-                              !_mi_os_has_overcommit() &&             // never delay on overcommit systems
-                              _mi_current_thread_count() > 2 &&       // do not delay for the first N threads
+                              // !_mi_os_has_overcommit() &&          // never delay on overcommit systems
+                              _mi_current_thread_count() > 1 &&       // do not delay for the first N threads
                               tld->count < (size_t)mi_option_get(mi_option_eager_commit_delay));
   const bool eager  = !eager_delayed && mi_option_is_enabled(mi_option_eager_commit);
   bool commit = eager; // || (page_kind >= MI_PAGE_LARGE);
@@ -658,8 +658,9 @@ static mi_segment_t* mi_segment_init(mi_segment_t* segment, size_t required, mi_
     memset((uint8_t*)segment + ofs, 0, info_size - ofs);
 
     // initialize pages info
-    for (uint8_t i = 0; i < capacity; i++) {
-      segment->pages[i].segment_idx = i;
+    for (size_t i = 0; i < capacity; i++) {
+      mi_assert_internal(i <= 255);
+      segment->pages[i].segment_idx = (uint8_t)i;
       segment->pages[i].is_reset = false;
       segment->pages[i].is_committed = commit;
       segment->pages[i].is_zero_init = is_zero;
