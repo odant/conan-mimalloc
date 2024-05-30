@@ -37,10 +37,7 @@ class MimallocConan(ConanFile):
         "single_object": False
     }
     generators = "cmake"
-    exports_patches = [
-        "patches/0001-CMakeLists.cmake.patch"
-    ]
-    exports_sources = "src/*", "CMakeLists.txt", *exports_patches
+    exports_sources = "src/*", "CMakeLists.txt"
     no_copy_source = False
     build_policy = "missing"
 
@@ -144,8 +141,6 @@ class MimallocConan(ConanFile):
         return cmake
 
     def build(self):
-        for p in self.exports_patches:
-            tools.patch(patch_file=p)
         with tools.vcvars(self.settings) if microsoft.is_msvc(self) else tools.no_op():
             cmake = self._configure_cmake()
             cmake.build()
