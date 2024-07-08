@@ -71,6 +71,21 @@ void _mi_os_init(void) {
 bool _mi_os_decommit(void* addr, size_t size, mi_stats_t* stats);
 bool _mi_os_commit(void* addr, size_t size, bool* is_zero, mi_stats_t* tld_stats);
 
+static inline uintptr_t _mi_align_down(uintptr_t sz, size_t alignment) {
+  mi_assert_internal(alignment != 0);
+  uintptr_t mask = alignment - 1;
+  if ((alignment & mask) == 0) { // power of two?
+    return (sz & ~mask);
+  }
+  else {
+    return ((sz / alignment) * alignment);
+  }
+}
+
+static void* mi_align_down_ptr(void* p, size_t alignment) {
+  return (void*)_mi_align_down((uintptr_t)p, alignment);
+}
+
 
 /* -----------------------------------------------------------
   aligned hinting
@@ -142,7 +157,8 @@ static void mi_os_prim_free(void* addr, size_t size, bool still_committed, mi_st
   _mi_stat_decrease(&stats->reserved, size);
 }
 
-void _mi_os_free_ex(void* addr, size_t size, bool still_committed, mi_memid_t memid, mi_stats_t* tld_stats) {
+void _mi_os_free_ex(void* addr, size_t size, bool still_committed, mi_memid_t memid, mi_stats_t* stats) {
+  if (stats == NULL) stats = &_mi_stats_main;
   if (mi_memkind_is_os(memid.memkind)) {
     size_t csize = _mi_os_good_alloc_size(size);
     void* base = addr;
@@ -156,10 +172,10 @@ void _mi_os_free_ex(void* addr, size_t size, bool still_committed, mi_memid_t me
     // free it
     if (memid.memkind == MI_MEM_OS_HUGE) {
       mi_assert(memid.is_pinned);
-      mi_os_free_huge_os_pages(base, csize, tld_stats);
+      mi_os_free_huge_os_pages(base, csize, stats);
     }
     else {
-      mi_os_prim_free(base, csize, still_committed, tld_stats);
+      mi_os_prim_free(base, csize, still_committed, stats);
     }
   }
   else {
@@ -168,8 +184,9 @@ void _mi_os_free_ex(void* addr, size_t size, bool still_committed, mi_memid_t me
   }
 }
 
-void  _mi_os_free(void* p, size_t size, mi_memid_t memid, mi_stats_t* tld_stats) {
-  _mi_os_free_ex(p, size, true, memid, tld_stats);
+void  _mi_os_free(void* p, size_t size, mi_memid_t memid, mi_stats_t* stats) {
+  if (stats == NULL) stats = &_mi_stats_main;
+  _mi_os_free_ex(p, size, true, memid, stats);
 }
 
 
@@ -284,6 +301,7 @@ static void* mi_os_prim_alloc_aligned(size_t size, size_t alignment, bool commit
 void* _mi_os_alloc(size_t size, mi_memid_t* memid, mi_stats_t* stats) {
   *memid = _mi_memid_none();
   if (size == 0) return NULL;
+  if (stats == NULL) stats = &_mi_stats_main;
   size = _mi_os_good_alloc_size(size);
   bool os_is_large = false;
   bool os_is_zero  = false;
@@ -299,6 +317,7 @@ void* _mi_os_alloc_aligned(size_t size, size_t alignment, bool commit, bool allo
   MI_UNUSED(&_mi_os_get_aligned_hint); // suppress unused warnings
   *memid = _mi_memid_none();
   if (size == 0) return NULL;
+  if (stats == NULL) stats = &_mi_stats_main;
   size = _mi_os_good_alloc_size(size);
   alignment = _mi_align_up(alignment, _mi_os_page_size());
 
@@ -327,6 +346,7 @@ void* _mi_os_alloc_aligned_at_offset(size_t size, size_t alignment, size_t offse
   mi_assert(offset <= size);
   mi_assert((alignment % _mi_os_page_size()) == 0);
   *memid = _mi_memid_none();
+  if (stats == NULL) stats = &_mi_stats_main;
   if (offset > MI_SEGMENT_SIZE) return NULL;
   if (offset == 0) {
     // regular aligned allocation
@@ -468,7 +488,7 @@ bool _mi_os_purge_ex(void* p, size_t size, bool allow_reset, mi_stats_t* stats)
   _mi_stat_increase(&stats->purged, size);
 
   if (mi_option_is_enabled(mi_option_purge_decommits) &&   // should decommit?
-      !_mi_preloading())                                   // don't decommit during preloading (unsafe)
+    !_mi_preloading())                                     // don't decommit during preloading (unsafe)
   {
     bool needs_recommit = true;
     mi_os_decommit_ex(p, size, &needs_recommit, stats);
@@ -487,6 +507,7 @@ bool _mi_os_purge_ex(void* p, size_t size, bool allow_reset, mi_stats_t* stats)
 bool _mi_os_purge(void* p, size_t size, mi_stats_t * stats) {
   return _mi_os_purge_ex(p, size, true, stats);
 }
+
 
 // Protect a region in memory to be not accessible.
 static  bool mi_os_protectx(void* addr, size_t size, bool protect) {

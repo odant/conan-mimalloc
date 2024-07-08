@@ -112,7 +112,7 @@ jobs:
         CC: clang
         CXX: clang++
         BuildType: debug-tsan-clang-cxx
-        cmakeExtraArgs: -DCMAKE_BUILD_TYPE=Debug -DMI_USE_CXX=ON -DMI_DEBUG_TSAN=ON
+        cmakeExtraArgs: -DCMAKE_BUILD_TYPE=RelWithDebInfo -DMI_USE_CXX=ON -DMI_DEBUG_TSAN=ON
       
   steps:
   - task: CMake@1
@@ -150,16 +150,9 @@ jobs:
       cmakeArgs: .. $(cmakeExtraArgs)
   - script: make -j$(sysctl -n hw.ncpu) -C $(BuildType)
     displayName: Make
-  # - script: MIMALLOC_VERBOSE=1 ./mimalloc-test-api
-  #   workingDirectory: $(BuildType)
-  #   displayName: TestAPI
-  # - script: MIMALLOC_VERBOSE=1 ./mimalloc-test-stress
-  #   workingDirectory: $(BuildType)
-  #   displayName: TestStress    
   - script: ctest --verbose --timeout 120
     workingDirectory: $(BuildType)
     displayName: CTest
-    
 #  - upload: $(Build.SourcesDirectory)/$(BuildType)
 #    artifact: mimalloc-macos-$(BuildType)
 
