@@ -12,7 +12,7 @@ def get_safe(options, name):
         return None
 
 class MimallocConan(ConanFile):
-    version = "2.1.8-beta1+0"
+    version = "2.1.9+0"
     name = "mimalloc"
     license = "MIT"
     url = "https://github.com/conan-io/conan-center-index"
