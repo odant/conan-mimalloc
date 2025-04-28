@@ -1,15 +1,9 @@
-from conans import ConanFile, CMake, tools
-from conans.errors import ConanInvalidConfiguration, ConanException
-from conan.tools import microsoft
-import os
-import shutil
-import functools
+from conan import ConanFile, tools
+from conan.tools.cmake import CMake, CMakeToolchain, CMakeDeps, cmake_layout
+from conan.errors import ConanInvalidConfiguration, ConanException
+from conan.tools import build, microsoft, scm, env, files  
 
-def get_safe(options, name):
-    try:
-        return getattr(options, name, None)
-    except ConanException:
-        return None
+import os, shutil, functools
 
 class MimallocConan(ConanFile):
     version = "2.1.9+0"
@@ -21,6 +15,7 @@ class MimallocConan(ConanFile):
     topics = ("conan", "mimalloc", "allocator", "performance", "microsoft")
     settings = "os", "compiler", "build_type", "arch"
     options = {
+        "dll_sign": [True, False],
         "shared": [True, False],
         "fPIC": [True, False],
         "secure": [True, False],
@@ -29,6 +24,7 @@ class MimallocConan(ConanFile):
         "single_object": [True, False]
     }
     default_options = {
+        "dll_sign": False,
         "shared": True,
         "fPIC": True,
         "secure": False,
@@ -36,10 +32,11 @@ class MimallocConan(ConanFile):
         "inject": False,
         "single_object": False
     }
-    generators = "cmake"
-    exports_sources = "src/*", "CMakeLists.txt"
+    exports_sources = "src/*"
     no_copy_source = False
     build_policy = "missing"
+    package_type = "library"
+    python_requires = "windows_signtool/[>=1.2]@odant/stable"
 
     @property
     def _source_subfolder(self):
@@ -52,14 +49,29 @@ class MimallocConan(ConanFile):
     def _compilers_minimum_version(self):
         return {
             "gcc": "7",
-            "Visual Studio": "15",
+            "msvc": "191",
             "clang": "5",
             "apple-clang": "10",
         }
 
+    def config_options(self):
+        if self.settings.os == "Windows":
+            del self.options.fPIC
+        else:
+            del self.options.dll_sign
+
+        # single_object and inject are options
+        # only when overriding on Unix-like platforms:
+        if self.settings.compiler == "msvc":
+            del self.options.single_object
+            del self.options.inject
+
+    def layout(self):
+        cmake_layout(self, src_folder="src") 
+        
     def configure(self):
         if self.options.shared:
-            del self.options.fPIC
+            self.options.rm_safe("fPIC")
 
             # single_object is valid only for static
             # override:
@@ -102,55 +114,56 @@ class MimallocConan(ConanFile):
             raise ConanInvalidConfiguration("Single object is incompatible with library injection")
 
         if self.settings.compiler.get_safe("cppstd"):
-            tools.check_min_cppstd(self, "17")
+            build.check_min_cppstd(self, "17")
 
         minimum_version = self._compilers_minimum_version.get(str(self.settings.compiler), False)
 
         if not minimum_version:
-            self.output.warn("mimalloc requires C++17. Your compiler is unknown. Assuming it supports C++17.")
-        elif tools.Version(self.settings.compiler.version) < minimum_version:
+            self.output.warning("mimalloc requires C++17. Your compiler is unknown. Assuming it supports C++17.")
+        elif scm.Version(self.settings.compiler.version) < minimum_version:
             raise ConanInvalidConfiguration("mimalloc requires a compiler that supports at least C++17")
 
     def build_requirements(self):
-        if get_safe(self.options, "dll_sign"):
-            self.build_requires("windows_signtool/[~=1.1]@%s/stable" % self.user)
+        self.tool_requires("ninja/[>=1.12.1]")
+        if self.options.get_safe("dll_sign"):
+            self.tool_requires("windows_signtool/[>=1.2]@%s/stable" % self.user)
 
-    def config_options(self):
-        if self.settings.os == "Windows":
-            del self.options.fPIC
-
-        # single_object and inject are options
-        # only when overriding on Unix-like platforms:
-        if self.settings.compiler == "Visual Studio":
-            del self.options.single_object
-            del self.options.inject
-
-    @functools.lru_cache(1)    
-    def _configure_cmake(self):
-        cmake = CMake(self)
-        if cmake.is_multi_configuration:
-            cmake.definitions["CMAKE_BUILD_TYPE"] = self.settings.build_type
-        cmake.definitions["MI_BUILD_TESTS"] = "OFF"
-        cmake.definitions["MI_BUILD_SHARED"] = self.options.shared
-        cmake.definitions["MI_BUILD_STATIC"] = not self.options.shared
-        cmake.definitions["MI_BUILD_OBJECT"] = self.options.get_safe("single_object", False)
-        cmake.definitions["MI_OVERRIDE"] = "ON" if self.options.override else "OFF"
-        cmake.definitions["MI_SECURE"] = "ON" if self.options.secure else "OFF"
-        cmake.definitions["MI_INSTALL_TOPLEVEL"] = "ON"
-        cmake.configure(build_folder=self._build_subfolder)
-        return cmake
-
+    def generate(self):
+        envir = env.VirtualBuildEnv(self);
+        envir.generate();
+        
+        if microsoft.is_msvc(self):
+            vcvars = microsoft.VCVars(self);
+            vcvars.generate();
+        
+        tc = CMakeToolchain(self, generator="Ninja")
+        tc.variables["MI_BUILD_TESTS"] = "OFF"
+        tc.variables["MI_BUILD_SHARED"] = self.options.shared
+        tc.variables["MI_BUILD_STATIC"] = not self.options.shared
+        tc.variables["MI_BUILD_OBJECT"] = self.options.get_safe("single_object", False)
+        tc.variables["MI_OVERRIDE"] = "ON" if self.options.override else "OFF"
+        tc.variables["MI_SECURE"] = "ON" if self.options.secure else "OFF"
+        tc.variables["MI_INSTALL_TOPLEVEL"] = "ON"
+        tc.generate()
+            
     def build(self):
-        with tools.vcvars(self.settings) if microsoft.is_msvc(self) else tools.no_op():
-            cmake = self._configure_cmake()
-            cmake.build()
+        cmake = CMake(self)
+        cmake.configure()
+        cmake.build()
 
     def package(self):
-        self.copy("LICENSE", dst="licenses", src=self._source_subfolder)
-        with tools.vcvars(self.settings) if microsoft.is_msvc(self) else tools.no_op():
-            cmake = self._configure_cmake()
-            cmake.install()
+        files.copy(self, "LICENSE", dst=os.path.join(self.package_folder, "licenses"), src=os.path.join(self.source_folder, "src"))
+        cmake = CMake(self)
+        cmake.install()
 
+        clean_dirs = [
+            os.path.join(self.package_folder, "lib", "cmake"),
+            os.path.join(self.package_folder, "lib", "pkgconfig")
+        ]
+        for d in clean_dirs:
+            if os.path.isdir(d):
+                shutil.rmtree(d) 
+                
         if self.options.get_safe("single_object"):
             tools.remove_files_by_mask(os.path.join(self.package_folder, "lib"),
                                        "*.a")
@@ -159,21 +172,13 @@ class MimallocConan(ConanFile):
             shutil.copy(os.path.join(self.package_folder, "lib", self._obj_name + ".o"),
                         os.path.join(self.package_folder, "lib", self._obj_name))
 
+        # Sign DLL
+        if self.options.get_safe("dll_sign"):
+            self.python_requires["windows_signtool"].module.sign(self, [os.path.join(self.package_folder, "bin", "*.dll")])
+
     @property
     def _obj_name(self):
         name = "mimalloc"
-        if self.options.secure:
-            name += "-secure"
-        if self.settings.build_type not in ("Release", "RelWithDebInfo", "MinSizeRel"):
-            name += "-{}".format(str(self.settings.build_type).lower())
-        return name
-
-    @property
-    def _lib_name(self):
-        name = "mimalloc" if self.settings.os == "Windows" else "libmimalloc"
-
-        if self.settings.os == "Windows" and not self.options.shared:
-            name += "-static"
         if self.options.secure:
             name += "-secure"
         if self.settings.build_type not in ("Release", "RelWithDebInfo", "MinSizeRel"):
@@ -196,7 +201,7 @@ class MimallocConan(ConanFile):
             self.cpp_info.libdirs = []
             self.cpp_info.bindirs = []
         else:
-            self.cpp_info.libs = tools.collect_libs(self)
+            self.cpp_info.libs = files.collect_libs(self)
 
         if self.settings.os == "Linux":
             self.cpp_info.system_libs.append("pthread")
