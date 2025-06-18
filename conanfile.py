@@ -6,7 +6,7 @@ from conan.tools import build, microsoft, scm, env, files
 import os, shutil, functools
 
 class MimallocConan(ConanFile):
-    version = "2.2.3+0"
+    version = "2.2.4+0"
     name = "mimalloc"
     license = "MIT"
     url = "https://github.com/conan-io/conan-center-index"
